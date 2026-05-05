@@ -18,15 +18,20 @@ import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
 import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.graphics.GL20;
+import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.Animation;
+import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 
 import java.awt.*;
 import java.util.ArrayList;
 import java.util.Iterator;
+
+import static com.badlogic.gdx.Input.Keys.H;
+import static com.badlogic.gdx.Input.Keys.W;
 
 public class GameScreen implements Screen {
 
@@ -38,11 +43,20 @@ public class GameScreen implements Screen {
     private static final float MOVE_SPEED = 150f;
     private static final float GROUND_Y = 50f;
 
+    private static final int START_LIVES = 3;
+    private static final float SPAWN_X = 50f;
+    private static final float SPAWN_Y = 80f;
+
+
     // ── Rendering ──
     private SpriteBatch batch;
     private OrthographicCamera camera;
     private Texture playerSheet;
 
+
+    private Texture pixel;
+
+    private BitmapFont hudFont;
 
     Animation<TextureRegion> idleAnim, runAnim, jumpAnim;
     float stateTime = 0f;
@@ -58,6 +72,12 @@ public class GameScreen implements Screen {
     ArrayList<Rectangle> coins;
     Rectangle playerBounds;
     int score = 0;
+
+    ArrayList<Rectangle> platforms;
+
+    int lives = START_LIVES;
+    boolean switchToGameOver = false;
+    boolean playerWon = false;
 
     // ── Player ──
     private float playerX = 100f;
@@ -78,6 +98,12 @@ public class GameScreen implements Screen {
         // For Day 1, just load the full sprite sheet as a single texture.
         // On Day 2 you'll split it into animations.
         playerSheet = new Texture("player.png");
+
+        pixel = new Texture("white.png");
+
+        hudFont = new BitmapFont();
+        hudFont.setColor(Color.WHITE);
+        hudFont.getData().setScale(1.5f);
 
         TextureRegion[][] grid = TextureRegion.split(playerSheet, 64, 64);
         idleAnim = new Animation<>(0.2f, grid[0]);   // row 0
@@ -102,15 +128,46 @@ public class GameScreen implements Screen {
         playerBounds = new Rectangle((int) playerX, (int) playerY, 64, 64);
 
 
+        platforms = new ArrayList<>();
+        platforms.add(new Rectangle(0, 30, W, 20));
+        platforms.add(new Rectangle(100, 130, 120, 16));
+        platforms.add(new Rectangle(300, 130, 120, 16));
+        platforms.add(new Rectangle(500, 130, 120, 16));
+        platforms.add(new Rectangle(50, 230, 140, 16));
+        platforms.add(new Rectangle(250, 260, 160, 16));
+        platforms.add(new Rectangle(470, 230, 130, 16));
+        platforms.add(new Rectangle(150, 360, 130, 16));
+        platforms.add(new Rectangle(380, 390, 140, 16));
+
         enemies = new ArrayList<>();
         enemies.add(new float[]{250, GROUND_Y, 80, 200, 350});
         enemies.add(new float[]{450, GROUND_Y, 60, 400, 550});
 
 
+        enemies = new ArrayList<>();
+        enemies.add(new float[]{200, 50, 70, 100, 350});
+        enemies.add(new float[]{310, 146, 50, 300, 400});
+        enemies.add(new float[]{260, 276, -45, 250, 390});
+
         coins = new ArrayList<>();
         for (int i = 0; i < 5; i++) {
             coins.add(new Rectangle(150 + i * 70, 200, 32, 32));
        }
+
+        coins = new ArrayList<>();
+        coins.add(new Rectangle(60, 70, 32, 32));
+        coins.add(new Rectangle(440, 70, 32, 32));
+        coins.add(new Rectangle(140, 160, 32, 32));
+        coins.add(new Rectangle(540, 160, 32, 32));
+        coins.add(new Rectangle(80, 260, 32, 32));
+        coins.add(new Rectangle(310, 290, 32, 32));
+        coins.add(new Rectangle(510, 260, 32, 32));
+        coins.add(new Rectangle(190, 390, 32, 32));
+        coins.add(new Rectangle(430, 420, 32, 32));
+
+        playerX = SPAWN_X;
+        playerY = SPAWN_Y;
+
     }
 
 
@@ -135,13 +192,19 @@ public class GameScreen implements Screen {
     private void checkCollisions(){
         playerBounds.setLocation((int) playerX, (int) playerY);
 
+        playerBounds.setLocation((int) (playerX + 18), (int) (playerY + 6));
         for (float[] enemy : enemies){
             Rectangle enemyRect = new Rectangle((int) enemy[0], (int) enemy[1], 64, 64);
+
+            enemyRect = new Rectangle((int) (enemy[0] + 12), (int) (enemy[1] + 10), 40, 36);
             if (playerBounds.equals(enemyRect)){
                 playerX = 100;
                 playerY = GROUND_Y;
                 velocityY = 0;
                 System.out.println("Hit! Resetting player.");
+
+                loseLife();
+                return;
             }
         }
         Iterator<Rectangle> it = coins.iterator();
@@ -153,10 +216,33 @@ public class GameScreen implements Screen {
                 System.out.println("Coin! Score: " + score);
             }
         }
+
+        if (coins.isEmpty()) {
+            switchToGameOver = true;
+            playerWon = true;
+        }
     }
+
+private void loseLife() {
+    lives--;
+    if (lives <= 0) {
+        switchToGameOver = true;
+        playerWon = false;
+    } else {
+        playerX = SPAWN_X;
+        playerY = SPAWN_Y;
+        velocityY = 0;
+        onGround = false;
+      }
+}
     @Override
     public void render(float delta) {
 
+        if (switchToGameOver) {
+            game.setScreen(new GameOverScreen(game, score, playerWon));
+            dispose();
+            return;
+        }
         // ── INPUT ──
         if (Gdx.input.isKeyPressed(Input.Keys.LEFT)){
             playerX -= MOVE_SPEED * delta;
@@ -166,6 +252,9 @@ public class GameScreen implements Screen {
             velocityY = JUMP_VELOCITY;
             onGround = false;
         }
+
+        if (playerX < 0) playerX = 0;
+        if (playerX > W - 64) playerX = W - 64;
 
         // ── PHYSICS ──
         velocityY += GRAVITY * delta;
@@ -177,6 +266,26 @@ public class GameScreen implements Screen {
         }
 
 
+        onGround = false;
+        for (Rectangle plat : platforms) {
+            if (velocityY <= 0) {
+                 float playerBottom = playerY;
+                 float platTop = plat.y + plat.height;
+                 boolean horizontalOverlap =
+                        (playerX + 64 > plat.x) && (playerX < plat.x + plat.width);
+                if (horizontalOverlap
+                 && playerBottom <= platTop
+                 && playerBottom >= platTop - 15) {
+                    playerY = platTop;
+                    velocityY = 0;
+                    onGround = true;
+                }
+            }
+        }
+
+        if (playerY < -100) {
+             loseLife();
+        }
         updateEnemies(delta);
         checkCollisions();
 
@@ -209,6 +318,12 @@ public class GameScreen implements Screen {
         batch.setProjectionMatrix(camera.combined);
         batch.begin();
 
+        batch.setColor(0.3f, 0.3f, 0.5f, 1f);
+        for (Rectangle plat : platforms) {
+             batch.draw(pixel, plat.x, plat.y, plat.width, plat.height);
+        }
+        batch.setColor(Color.WHITE);
+
         batch.draw(playerSheet, playerX, playerY, 64, 64);
 
 
@@ -222,6 +337,11 @@ public class GameScreen implements Screen {
         for (Rectangle coin : coins) {
             batch.draw(coinFrame, coin.x, coin.y);
         }
+
+        hudFont.setColor(Color.WHITE);
+        hudFont.draw(batch, "Score: " + score, 10, H - 10);
+        hudFont.draw(batch, "Lives: " + lives, 10, H - 35);
+        hudFont.draw(batch, "Coins: " + coins.size() + " left", W - 180, H - 10);
 
 
 
@@ -243,5 +363,7 @@ public class GameScreen implements Screen {
         playerSheet.dispose();
         enemySheet.dispose();
         coinSheet.dispose();
+        pixel.dispose();
+        hudFont.dispose();
     }
 }
